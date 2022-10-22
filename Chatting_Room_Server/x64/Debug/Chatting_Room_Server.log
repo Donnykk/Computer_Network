@@ -1,0 +1,9 @@
+﻿  server.cpp
+F:\Environment\Computer Network\Chatting_Room_Server\server.cpp(25,51): warning C4267: “参数”: 从“size_t”转换到“int”，可能丢失数据
+F:\Environment\Computer Network\Chatting_Room_Server\server.cpp(24,2): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Server\server.cpp(42,23): warning C4996: 'ctime': This function or variable may be unsafe. Consider using ctime_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Server\server.cpp(45,18): warning C4996: 'strtok': This function or variable may be unsafe. Consider using strtok_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Server\server.cpp(46,18): warning C4996: 'strtok': This function or variable may be unsafe. Consider using strtok_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Server\server.cpp(47,21): warning C4996: 'strtok': This function or variable may be unsafe. Consider using strtok_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Server\server.cpp(97,33): warning C4996: 'inet_addr': Use inet_pton() or InetPton() instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings
+  Chatting_Room_Server.vcxproj -> F:\Environment\Computer Network\Chatting_Room_Server\x64\Debug\Chatting_Room_Server.exe

@@ -1,0 +1,13 @@
+﻿  client.cpp
+F:\Environment\Computer Network\Chatting_Room_Client\client.cpp(26,18): warning C4996: 'strtok': This function or variable may be unsafe. Consider using strtok_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Client\client.cpp(27,18): warning C4996: 'strtok': This function or variable may be unsafe. Consider using strtok_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Client\client.cpp(28,21): warning C4996: 'strtok': This function or variable may be unsafe. Consider using strtok_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Client\client.cpp(31,23): warning C4996: 'ctime': This function or variable may be unsafe. Consider using ctime_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Client\client.cpp(35,4): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Client\client.cpp(74,48): warning C4267: “参数”: 从“size_t”转换到“int”，可能丢失数据
+F:\Environment\Computer Network\Chatting_Room_Client\client.cpp(64,3): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Client\client.cpp(73,3): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Client\client.cpp(77,23): warning C4996: 'ctime': This function or variable may be unsafe. Consider using ctime_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+F:\Environment\Computer Network\Chatting_Room_Client\client.cpp(98,28): warning C4996: 'inet_addr': Use inet_pton() or InetPton() instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings
+F:\Environment\Computer Network\Chatting_Room_Client\client.cpp(102,33): warning C4996: 'inet_addr': Use inet_pton() or InetPton() instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings
+  Chatting_Room_Client.vcxproj -> F:\Environment\Computer Network\Chatting_Room_Client\x64\Debug\Chatting_Room_Client.exe
