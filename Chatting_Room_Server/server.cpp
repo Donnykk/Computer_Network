@@ -9,7 +9,7 @@
 
 using namespace std;
 const int BUFFER_SIZE = 1024;
-const char ip[1024] = "10.136.16.198";
+const char ip[1024] = "127.0.0.1";
 bool client_A = false;
 bool client_B = false;
 SOCKET client_A_socket = INVALID_SOCKET;

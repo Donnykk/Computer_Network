@@ -10,7 +10,7 @@
 using namespace std;
 const int BUFFER_SIZE = 1024;
 char CLIENT_NAME[9];
-const char ip[1024] = "10.136.16.198";
+const char ip[1024] = "127.0.0.1";
 
 void Receive_message(void* param)
 {
