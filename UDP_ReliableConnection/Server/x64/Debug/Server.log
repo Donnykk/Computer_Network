@@ -1,0 +1,4 @@
+﻿  server.cpp
+F:\Environment\Computer Network\UDP_ReliableConnection\Server\server.cpp(169,27): warning C4244: “=”: 从“u_short”转换到“unsigned char”，可能丢失数据
+F:\Environment\Computer Network\UDP_ReliableConnection\Server\server.cpp(227,27): warning C4244: “=”: 从“u_short”转换到“unsigned char”，可能丢失数据
+  Server.vcxproj -> F:\Environment\Computer Network\UDP_ReliableConnection\Server\x64\Debug\Server.exe
