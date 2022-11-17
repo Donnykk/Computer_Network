@@ -30,10 +30,11 @@ unsigned char check_sum(unsigned char *data, int size)
     unsigned char *buf = (unsigned char *)malloc(size + 1);
     memset(buf, 0, size + 1);
     memcpy(buf, data, size);
-    unsigned long sum = 0;
+    unsigned short sum = 0;
     while (count--)
     {
         sum += *buf++;
+        //½øÎ»»Ø¾í
         if (sum & 0xff00)
         {
             sum &= 0x00ff;
