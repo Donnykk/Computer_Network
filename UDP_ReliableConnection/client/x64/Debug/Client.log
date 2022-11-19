@@ -1,5 +1,0 @@
-﻿  client.cpp
-F:\Environment\Computer Network\UDP_ReliableConnection\Client\client.cpp(51,19): warning C4101: “sum”: 未引用的局部变量
-F:\Environment\Computer Network\UDP_ReliableConnection\Client\client.cpp(230,19): warning C4101: “sum”: 未引用的局部变量
-F:\Environment\Computer Network\UDP_ReliableConnection\Client\client.cpp(326,81): warning C4267: “参数”: 从“size_t”转换到“int”，可能丢失数据
-  Client.vcxproj -> F:\Environment\Computer Network\UDP_ReliableConnection\Client\x64\Debug\Client.exe
