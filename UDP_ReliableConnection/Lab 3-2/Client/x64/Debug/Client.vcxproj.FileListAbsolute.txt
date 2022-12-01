@@ -1,1 +1,2 @@
 F:\Environment\Computer Network\UDP_ReliableConnection\Client\x64\Debug\Client.exe
+F:\Environment\Computer Network\UDP_ReliableConnection\Lab 3-2\Client\x64\Debug\Client.exe

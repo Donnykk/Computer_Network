@@ -5,6 +5,9 @@
 #pragma comment(lib, "ws2_32.lib")
 using namespace std;
 
+SOCKADDR_IN server_addr;
+SOCKET server;
+
 char data_buffer[20000000];
 
 const int BUFFER_SIZE = 4096;
@@ -14,7 +17,8 @@ const unsigned char ACK_SYN = 0x3;
 const unsigned char FIN = 0x4;
 const unsigned char FIN_ACK = 0x5;
 const unsigned char END = 0x7;
-double MAX_WAIT_TIME = 500;
+const int MAX_WINDOW = 8;
+const double MAX_WAIT_TIME = 500;
 
 struct HEADER
 {
@@ -43,7 +47,7 @@ unsigned short check_sum(unsigned short *message, int size)
     return ~(sum & 0xffff);
 }
 
-int tryConnect(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_addr_len)
+int Shake_hand(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_addr_len)
 {
     HEADER header;
     char *buffer = new char[sizeof(header)];
@@ -51,13 +55,13 @@ int tryConnect(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_addr_
     //第一次握手请求
     header.flag = SYN;
     header.sum = 0;
-    unsigned short temp = check_sum((unsigned short *)&header, sizeof(header));
-    header.sum = temp;
+    header.sum = check_sum((unsigned short *)&header, sizeof(header));
     memcpy(buffer, &header, sizeof(header));
     if (sendto(socketClient, buffer, sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len) == SOCKET_ERROR)
     {
         return SOCKET_ERROR;
     }
+    cout << "发送第一次握手请求" << endl;
     clock_t start = clock();
     unsigned long mode = 1;
     ioctlsocket(socketClient, FIONBIO, &mode);
@@ -95,121 +99,136 @@ int tryConnect(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_addr_
     {
         return SOCKET_ERROR;
     }
+    cout << "发送第三次握手请求" << endl;
     cout << "服务器成功连接！" << endl;
     return 1;
 }
 
-void send_package(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_addr_len, char *message, int len, int &seq)
+void Send_Message(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_addr_len, char *message, int len)
 {
+    int package_num = len / BUFFER_SIZE + (len % BUFFER_SIZE != 0); //数据包数量
     HEADER header;
-    char *buffer = new char[BUFFER_SIZE + sizeof(header)];
-    header.datasize = len;
-    header.SEQ = unsigned char(seq);
-    memcpy(buffer, &header, sizeof(header));
-    memcpy(buffer + sizeof(header), message, sizeof(header) + len);
-    unsigned short check = check_sum((unsigned short *)buffer, sizeof(header) + len);
-    header.sum = check;
-    memcpy(buffer, &header, sizeof(header));
-    sendto(socketClient, buffer, len + sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len);
-    cout << "发送数据 " << len << " bytes!"
-         << " flag:" << int(header.flag) << " SEQ:" << int(header.SEQ) << " SUM:" << int(header.sum) << endl;
-    clock_t start = clock();
-    while (true)
+    char *buffer = new char[sizeof(header)];
+    int first_pos = -1, last_pos = 0;
+    clock_t start;
+    while (first_pos < package_num - 1)
     {
+        int pack_len = 0;
+        if (last_pos - first_pos < MAX_WINDOW)
+        {
+            //若窗口未满，直接发送数据包即可
+            HEADER header;
+            char *buffer = new char[BUFFER_SIZE + sizeof(header)];
+            if (last_pos == package_num - 1)
+                pack_len = len - (package_num - 1) * BUFFER_SIZE;
+            else
+                pack_len = BUFFER_SIZE;
+            header.SEQ = unsigned char(last_pos % 256);
+            header.datasize = pack_len;
+            memcpy(buffer, &header, sizeof(header));
+            memcpy(buffer + sizeof(header), message + last_pos * BUFFER_SIZE, pack_len);
+            header.sum = check_sum((unsigned short *)buffer, sizeof(header) + pack_len);
+            memcpy(buffer, &header, sizeof(header));
+            sendto(socketClient, buffer, pack_len + sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len);
+            cout << "发送信息 " << len << " bytes! SEQ:" << int(header.SEQ) << endl;
+            start = clock();
+            last_pos++;
+        }
+        //变为非阻塞模式
         unsigned long mode = 1;
         ioctlsocket(socketClient, FIONBIO, &mode);
-        while (recvfrom(socketClient, buffer, BUFFER_SIZE, 0, (sockaddr *)&server_addr, &server_addr_len) <= 0)
+        if (recvfrom(socketClient, buffer, BUFFER_SIZE, 0, (sockaddr *)&server_addr, &server_addr_len))
         {
-            if (clock() - start > MAX_WAIT_TIME)
+            memcpy(&header, buffer, sizeof(header));
+            if (check_sum((unsigned short *)&header, sizeof(header)) == 0)
             {
-                header.datasize = len;
-                header.SEQ = u_char(seq);
-                header.flag = u_char(0x0);
-                memcpy(buffer, &header, sizeof(header));
-                memcpy(buffer + sizeof(header), message, sizeof(header) + len);
-                unsigned short check = check_sum((unsigned short *)buffer, sizeof(header) + len); //计算校验和
-                header.sum = check;
-                memcpy(buffer, &header, sizeof(header));
-                sendto(socketClient, buffer, len + sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len);
-                cout << "超时重传 " << len << " bytes! Flag:" << int(header.flag) << " SEQ:" << int(header.SEQ) << endl;
-                clock_t start = clock();
+                if (header.SEQ > first_pos % 256) // ACK对应序列号有效
+                    first_pos += int(header.SEQ) - first_pos % 256;
+                else if (header.SEQ < MAX_WINDOW && first_pos % 256 + MAX_WINDOW >= 256) //窗口横跨两个256序列号组
+                    first_pos += int(header.SEQ) - first_pos % 256 + 256;
+                else
+                    continue; //忽略重复ACK
+                cout << "发送已被确认! SEQ:" << int(header.SEQ) << endl;
+                cout << "窗口：" << first_pos << "~" << first_pos + MAX_WINDOW << endl;
             }
-        }
-        memcpy(&header, buffer, sizeof(header)); //缓冲区接收到信息，读取
-        unsigned short check = check_sum((unsigned short *)&header, sizeof(header));
-        if (header.SEQ == unsigned short(seq) && header.flag == ACK)
-        {
-            cout << "数据已被确认! Flag:" << int(header.flag) << " SEQ:" << int(header.SEQ) << endl;
-            break;
+            else
+            {
+                //校验和出错，丢弃未确认数据包
+                last_pos = first_pos + 1;
+                cout << "校验错误！已丢弃未确认数据包" << endl;
+                continue;
+            }
         }
         else
         {
-            continue;
+            clock_t present = clock();
+            if (present - start > MAX_WAIT_TIME)
+            {
+                last_pos = first_pos + 1;
+                cout << "确认超时，开始重传...";
+            }
         }
+        mode = 0;
+        ioctlsocket(socketClient, FIONBIO, &mode);
     }
-    unsigned long mode = 0;
-    ioctlsocket(socketClient, FIONBIO, &mode); //改回阻塞模式
-}
-
-void send(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_addr_len, char *message, int len)
-{
-    int packagenum = len / BUFFER_SIZE + (len % BUFFER_SIZE != 0);
-    int seq = 0;
-    for (int i = 0; i < packagenum; i++)
-    {
-        send_package(socketClient, server_addr, server_addr_len, message + i * BUFFER_SIZE, i == packagenum - 1 ? len - (packagenum - 1) * BUFFER_SIZE : BUFFER_SIZE, seq);
-        seq++;
-        if (seq > 255)
-        {
-            seq = seq - 256;
-        }
-    }
-    HEADER header;
-    char *buffer = new char[sizeof(header)];
+    //发送结束信息
     header.flag = END;
     header.sum = 0;
-    unsigned short temp = check_sum((unsigned short *)&header, sizeof(header));
-    header.sum = temp;
+    header.sum = check_sum((unsigned short *)&header, sizeof(header));
     memcpy(buffer, &header, sizeof(header));
     sendto(socketClient, buffer, sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len);
-    cout << "发送完毕!" << endl;
-    clock_t start = clock();
+    cout << "已发送结束请求!" << endl;
+    start = clock();
     while (true)
     {
         unsigned long mode = 1;
         ioctlsocket(socketClient, FIONBIO, &mode);
         while (recvfrom(socketClient, buffer, BUFFER_SIZE, 0, (sockaddr *)&server_addr, &server_addr_len) <= 0)
         {
-            if (clock() - start > MAX_WAIT_TIME)
+            clock_t present = clock();
+            if (present - start > MAX_WAIT_TIME)
             {
                 char *buffer = new char[sizeof(header)];
                 header.flag = END;
                 header.sum = 0;
-                unsigned short temp = check_sum((unsigned short *)&header, sizeof(header));
-                header.sum = temp;
+                header.sum = check_sum((unsigned short *)&header, sizeof(header));
                 memcpy(buffer, &header, sizeof(header));
                 sendto(socketClient, buffer, sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len);
-                cout << "超时重传！" << endl;
+                cout << "发送超时! 开始重传..." << endl;
                 start = clock();
             }
         }
         memcpy(&header, buffer, sizeof(header));
-        unsigned short check = check_sum((unsigned short *)&header, sizeof(header));
-        if (header.flag == END)
+        if (check_sum((unsigned short *)&header, sizeof(header)) == 0)
         {
-            cout << "对方已成功接收文件!" << endl;
-            break;
+            //校验和正确
+            if (header.flag == END)
+            {
+                cout << "对方已成功接收文件!" << endl;
+                break;
+            }
+            else
+            {
+                continue;
+            }
         }
         else
         {
-            continue;
+            //校验失败，重传
+            header.flag = END;
+            header.sum = 0;
+            header.sum = check_sum((unsigned short *)&header, sizeof(header));
+            memcpy(buffer, &header, sizeof(header));
+            sendto(socketClient, buffer, sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len);
+            cout << "校验失败，已重新发送结束请求!" << endl;
+            start = clock();
         }
     }
     unsigned long mode = 0;
-    ioctlsocket(socketClient, FIONBIO, &mode); //改回阻塞模式
+    ioctlsocket(socketClient, FIONBIO, &mode);
 }
 
-int disConnect(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_addr_len)
+int Wave_hand(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_addr_len)
 {
     HEADER header;
     char *buffer = new char[sizeof(header)];
@@ -217,13 +236,13 @@ int disConnect(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_addr_
     //第一次握手请求
     header.flag = FIN;
     header.sum = 0;
-    unsigned short temp = check_sum((unsigned short *)&header, sizeof(header));
-    header.sum = temp;
+    header.sum = check_sum((unsigned short *)&header, sizeof(header));
     memcpy(buffer, &header, sizeof(header));
     if (sendto(socketClient, buffer, sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len) == SOCKET_ERROR)
     {
         return SOCKET_ERROR;
     }
+    cout << "发送第一次挥手请求" << endl;
     clock_t start = clock();
     unsigned long mode = 1;
     ioctlsocket(socketClient, FIONBIO, &mode);
@@ -258,6 +277,7 @@ int disConnect(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_addr_
     {
         return SOCKET_ERROR;
     }
+    cout << "发送第三次挥手请求" << endl;
     start = clock();
     //接收第四次挥手请求
     while (recvfrom(socketClient, buffer, sizeof(header), 0, (sockaddr *)&server_addr, &server_addr_len) <= 0)
@@ -273,7 +293,7 @@ int disConnect(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_addr_
                 return SOCKET_ERROR;
             }
             start = clock();
-            cout << "第四次握手超时，开始重传..." << endl;
+            cout << "第三次挥手超时，开始重传..." << endl;
         }
     }
     cout << "四次挥手结束！" << endl;
@@ -284,15 +304,13 @@ int main()
 {
     WSADATA wsadata;
     WSAStartup(MAKEWORD(2, 2), &wsadata);
-    SOCKADDR_IN server_addr;
-    SOCKET server;
     server_addr.sin_family = AF_INET; //使用IPV4
     server_addr.sin_port = htons(6666);
     server_addr.sin_addr.s_addr = htonl(2130706433);
     server = socket(AF_INET, SOCK_DGRAM, 0);
     int len = sizeof(server_addr);
     //建立连接
-    if (tryConnect(server, server_addr, len) == SOCKET_ERROR)
+    if (Shake_hand(server, server_addr, len) == SOCKET_ERROR)
     {
         return 0;
     }
@@ -308,11 +326,11 @@ int main()
         temp = fin.get();
     }
     fin.close();
-    send(server, server_addr, len, (char *)(filename.c_str()), filename.length());
+    Send_Message(server, server_addr, len, (char *)(filename.c_str()), filename.length());
     clock_t start = clock();
-    send(server, server_addr, len, data_buffer, index);
+    Send_Message(server, server_addr, len, data_buffer, index);
     clock_t end = clock();
     cout << "传输总时间为:" << (end - start) / CLOCKS_PER_SEC << "s" << endl;
     cout << "吞吐率为:" << ((float)index) / ((end - start) / CLOCKS_PER_SEC) << "byte/s" << endl;
-    disConnect(server, server_addr, len);
+    Wave_hand(server, server_addr, len);
 }

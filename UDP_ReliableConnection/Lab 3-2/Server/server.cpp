@@ -5,6 +5,9 @@
 #pragma comment(lib, "ws2_32.lib")
 using namespace std;
 
+SOCKADDR_IN server_addr;
+SOCKET server;
+
 char name_buffer[20];
 char data_buffer[200000000];
 
@@ -27,7 +30,7 @@ struct HEADER
 
 unsigned short check_sum(unsigned short *message, int size)
 {
-    int count = (size + 1) / 2;
+    int count = (size + 1) / sizeof(unsigned short);
     unsigned short *buf = (unsigned short *)malloc(size + 1);
     memset(buf, 0, size + 1);
     memcpy(buf, message, size);
@@ -44,7 +47,7 @@ unsigned short check_sum(unsigned short *message, int size)
     return ~(sum & 0xffff);
 }
 
-int tryConnect(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len)
+int Shake_hand(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len)
 {
     HEADER header;
     char *buffer = new char[sizeof(header)];
@@ -65,8 +68,7 @@ int tryConnect(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len)
     //发送第二次握手请求
     header.flag = ACK;
     header.sum = 0;
-    unsigned short temp = check_sum((unsigned short *)&header, sizeof(header));
-    header.sum = temp;
+    header.sum = check_sum((unsigned short *)&header, sizeof(header));
     memcpy(buffer, &header, sizeof(header));
     if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, len) == SOCKET_ERROR)
     {
@@ -81,8 +83,7 @@ int tryConnect(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len)
         {
             header.flag = ACK;
             header.sum = 0;
-            unsigned short temp = check_sum((unsigned short *)&header, sizeof(header));
-            header.flag = temp;
+            header.sum = check_sum((unsigned short *)&header, sizeof(header));
             memcpy(buffer, &header, sizeof(header));
             if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, len) == SOCKET_ERROR)
             {
@@ -104,89 +105,82 @@ int tryConnect(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len)
     return 1;
 }
 
-int recv_message(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len, char *message)
+int Receive_message(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &client_addr_len, char *message)
 {
-    long int all = 0;
     HEADER header;
     char *buffer = new char[BUFFER_SIZE + sizeof(header)];
-    int seq = 0;
-    int index = 0;
+    int seq = 0; //序列号
+    int len = 0; //已读取长度
     while (true)
     {
-        int length = recvfrom(socketServer, buffer, sizeof(header) + BUFFER_SIZE, 0, (sockaddr *)&client_addr, &len);
-        if (length == SOCKET_ERROR)
+        int mess_len = 0;
+        if (mess_len = recvfrom(socketServer, buffer, sizeof(header) + BUFFER_SIZE, 0, (sockaddr *)&client_addr, &client_addr_len))
         {
-            return SOCKET_ERROR;
-        }
-        memcpy(&header, buffer, sizeof(header));
-        if (header.flag == END && check_sum((unsigned short *)&header, sizeof(header)) == 0)
-        {
-            cout << "文件已接收" << endl;
-            break;
-        }
-        if (header.flag == unsigned char(0) && check_sum((unsigned short *)buffer, length - sizeof(header)))
-        {
-            //判断序列号是否符合
-            if (seq != int(header.SEQ))
+            memcpy(&header, buffer, sizeof(header));
+            if (header.flag == 0)
             {
-                header.flag = ACK;
-                header.datasize = 0;
-                header.SEQ = (unsigned char)seq;
-                header.sum = 0;
-                unsigned short temp = check_sum((unsigned short *)&header, sizeof(header));
-                header.sum = temp;
-                memcpy(buffer, &header, sizeof(header));
-                //重发该包的ACK
-                if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, len) == SOCKET_ERROR)
+                if (int(header.SEQ) == seq)
                 {
-                    return SOCKET_ERROR;
+                    char *temp_buffer = new char[mess_len - sizeof(header)];
+                    memcpy(temp_buffer, buffer + sizeof(header), mess_len - sizeof(header));
+                    memcpy(message + len, temp_buffer, mess_len - sizeof(header));
+                    len = len + int(header.datasize);
+                    cout << "已接收数据 " << mess_len - sizeof(header) << " bytes! SEQ: " << int(header.SEQ) << endl;
+                    //发送ACK
+                    header.flag = ACK;
+                    header.datasize = 0;
+                    header.SEQ = (unsigned char)seq;
+                    header.sum = 0;
+                    header.sum = check_sum((unsigned short *)&header, sizeof(header));
+                    memcpy(buffer, &header, sizeof(header));
+                    // Sleep(10); //模拟传输延迟
+                    if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, client_addr_len) == SOCKET_ERROR)
+                    {
+                        return SOCKET_ERROR;
+                    }
+                    cout << "已发送ACK! SEQ:" << (int)header.SEQ << endl;
+                    //增加当前序列号
+                    seq++;
+                    if (seq >= 256)
+                        seq -= 256;
                 }
-                cout << "向客户端重传ACK，SEQ:" << (int)header.SEQ << endl;
-                continue; //丢弃该数据包
+                else
+                {
+                    //序列号不匹配
+                    header.flag = ACK;
+                    header.datasize = 0;
+                    header.SEQ = (unsigned char)(seq - 1);
+                    header.sum = 0;
+                    header.sum = check_sum((unsigned short *)&header, sizeof(header));
+                    memcpy(buffer, &header, sizeof(header));
+                    //重发该包的ACK
+                    if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, client_addr_len) == SOCKET_ERROR)
+                    {
+                        return SOCKET_ERROR;
+                    }
+                    cout << "已发送ACK! SEQ:" << (int)header.SEQ << endl;
+                    continue;
+                }
             }
-            seq = int(header.SEQ);
-            if (seq > 255)
+            else if (header.flag == END && check_sum((unsigned short *)&header, sizeof(header)) == 0)
             {
-                seq = seq - 256;
-            }
-            cout << "收到数据 " << length - sizeof(header) << " bytes! Flag:" << int(header.flag) << " SUM:" << int(header.sum) << " SEQ : " << int(header.SEQ) << endl;
-            char *temp = new char[length - sizeof(header)];
-            memcpy(temp, buffer + sizeof(header), length - sizeof(header));
-            memcpy(message + all, temp, length - sizeof(header));
-            all += int(header.datasize);
-            //返回ACK
-            header.flag = ACK;
-            header.datasize = 0;
-            header.SEQ = (unsigned char)seq;
-            header.sum = 0;
-            unsigned short temp_ = check_sum((unsigned short *)&header, sizeof(header));
-            header.sum = temp_;
-            memcpy(buffer, &header, sizeof(header));
-            if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, len) == SOCKET_ERROR)
-            {
-                return SOCKET_ERROR;
-            }
-            cout << "已发送ACK:" << (int)header.SEQ << " SEQ:" << (int)header.SEQ << endl;
-            seq++;
-            if (seq > 255)
-            {
-                seq = seq - 256;
+                cout << "文件已接收完毕！" << endl;
+                break;
             }
         }
     }
     header.flag = END;
     header.sum = 0;
-    unsigned short temp = check_sum((unsigned short *)&header, sizeof(header));
-    header.sum = temp;
+    header.sum = check_sum((unsigned short *)&header, sizeof(header));
     memcpy(buffer, &header, sizeof(header));
-    if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, len) == SOCKET_ERROR)
+    if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, client_addr_len) == SOCKET_ERROR)
     {
         return SOCKET_ERROR;
     }
-    return all;
+    return len;
 }
 
-int disConnect(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len)
+int Wave_hand(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len)
 {
     HEADER header;
     char *buffer = new char[sizeof(header)];
@@ -206,8 +200,7 @@ int disConnect(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len)
     //发送第二次挥手信息
     header.flag = ACK;
     header.sum = 0;
-    unsigned short temp = check_sum((unsigned short *)&header, sizeof(header));
-    header.sum = temp;
+    header.sum = check_sum((unsigned short *)&header, sizeof(header));
     memcpy(buffer, &header, sizeof(header));
     if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, len) == SOCKET_ERROR)
     {
@@ -221,8 +214,7 @@ int disConnect(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len)
         {
             header.flag = ACK;
             header.sum = 0;
-            unsigned short temp = check_sum((unsigned short *)&header, sizeof(header));
-            header.flag = temp;
+            header.sum = check_sum((unsigned short *)&header, sizeof(header));
             memcpy(buffer, &header, sizeof(header));
             if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, len) == -1)
             {
@@ -244,8 +236,7 @@ int disConnect(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len)
     //发送第四次挥手请求
     header.flag = FIN_ACK;
     header.sum = 0;
-    temp = check_sum((unsigned short *)&header, sizeof(header));
-    header.sum = temp;
+    header.sum = check_sum((unsigned short *)&header, sizeof(header));
     memcpy(buffer, &header, sizeof(header));
     if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, len) == SOCKET_ERROR)
     {
@@ -260,8 +251,6 @@ int main()
 {
     WSADATA wsadata;
     WSAStartup(MAKEWORD(2, 2), &wsadata);
-    SOCKADDR_IN server_addr;
-    SOCKET server;
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(6666);
     server_addr.sin_addr.s_addr = htonl(2130706433);
@@ -269,12 +258,12 @@ int main()
     bind(server, (SOCKADDR *)&server_addr, sizeof(server_addr));
     cout << "开始监听......" << endl;
     int len = sizeof(server_addr);
-    if (tryConnect(server, server_addr, len) == SOCKET_ERROR)
+    if (Shake_hand(server, server_addr, len) == SOCKET_ERROR)
     {
         return 0;
     }
-    int namelen = recv_message(server, server_addr, len, name_buffer);
-    int datalen = recv_message(server, server_addr, len, data_buffer);
+    int namelen = Receive_message(server, server_addr, len, name_buffer);
+    int datalen = Receive_message(server, server_addr, len, data_buffer);
     string a;
     for (int i = 0; i < namelen; i++)
     {
@@ -287,5 +276,5 @@ int main()
     }
     fout.close();
     cout << "文件已成功下载到本地" << endl;
-    disConnect(server, server_addr, len);
+    Wave_hand(server, server_addr, len);
 }
