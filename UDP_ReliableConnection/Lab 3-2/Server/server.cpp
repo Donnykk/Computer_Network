@@ -5,19 +5,19 @@
 #pragma comment(lib, "ws2_32.lib")
 using namespace std;
 
+#define SYN 0x1
+#define ACK 0x2
+#define ACK_SYN 0x3
+#define FIN 0x4
+#define FIN_ACK 0x5
+#define END 0x7
+
 SOCKADDR_IN server_addr;
 SOCKET server;
 
 char name_buffer[20];
 char data_buffer[200000000];
-
 const int BUFFER_SIZE = 4096;
-const unsigned char SYN = 0x1;
-const unsigned char ACK = 0x2;
-const unsigned char ACK_SYN = 0x3;
-const unsigned char FIN = 0x4;
-const unsigned char FIN_ACK = 0x5;
-const unsigned char END = 0x7;
 double MAX_WAIT_TIME = 500;
 
 struct HEADER
@@ -119,7 +119,7 @@ int Receive_message(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &client_
             memcpy(&header, buffer, sizeof(header));
             if (header.flag == 0)
             {
-                if (int(header.SEQ) == seq)
+                if (header.SEQ == seq)
                 {
                     char *temp_buffer = new char[mess_len - sizeof(header)];
                     memcpy(temp_buffer, buffer + sizeof(header), mess_len - sizeof(header));
@@ -133,7 +133,6 @@ int Receive_message(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &client_
                     header.sum = 0;
                     header.sum = check_sum((unsigned short *)&header, sizeof(header));
                     memcpy(buffer, &header, sizeof(header));
-                    // Sleep(10); //模拟传输延迟
                     if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, client_addr_len) == SOCKET_ERROR)
                     {
                         return SOCKET_ERROR;
@@ -147,18 +146,19 @@ int Receive_message(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &client_
                 else
                 {
                     //序列号不匹配
+                    cout << "已接收数据 " << mess_len - sizeof(header) << " bytes! SEQ: " << int(header.SEQ) << endl;
                     header.flag = ACK;
                     header.datasize = 0;
                     header.SEQ = (unsigned char)(seq - 1);
                     header.sum = 0;
                     header.sum = check_sum((unsigned short *)&header, sizeof(header));
                     memcpy(buffer, &header, sizeof(header));
-                    //重发该包的ACK
+                    //重发ACK
                     if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, client_addr_len) == SOCKET_ERROR)
                     {
                         return SOCKET_ERROR;
                     }
-                    cout << "已发送ACK! SEQ:" << (int)header.SEQ << endl;
+                    cout << "待接收序列号: " << seq << " 序列号无效，已重发ACK! SEQ:" << (int)header.SEQ << endl;
                     continue;
                 }
             }
@@ -223,9 +223,8 @@ int Wave_hand(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len)
             cout << "第二次挥手超时，开始重传..." << endl;
         }
     }
-    HEADER temp_header;
-    memcpy(&temp_header, buffer, sizeof(header));
-    if (temp_header.flag == FIN_ACK && check_sum((unsigned short *)&temp_header, sizeof(temp_header) == 0))
+    memcpy(&header, buffer, sizeof(header));
+    if (header.flag == FIN_ACK && check_sum((unsigned short *)&header, sizeof(header) == 0))
     {
         cout << "收到第三次挥手请求" << endl;
     }
@@ -252,7 +251,7 @@ int main()
     WSADATA wsadata;
     WSAStartup(MAKEWORD(2, 2), &wsadata);
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(6666);
+    server_addr.sin_port = htons(6667);
     server_addr.sin_addr.s_addr = htonl(2130706433);
     server = socket(AF_INET, SOCK_DGRAM, 0);
     bind(server, (SOCKADDR *)&server_addr, sizeof(server_addr));
