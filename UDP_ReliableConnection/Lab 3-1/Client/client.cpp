@@ -112,7 +112,7 @@ void send_package(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_ad
     memcpy(buffer, &header, sizeof(header));
     sendto(socketClient, buffer, len + sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len);
     cout << "发送数据 " << len << " bytes!"
-         << " flag:" << int(header.flag) << " SEQ:" << int(header.SEQ) << " SUM:" << int(header.sum) << endl;
+         << " flag:" << int(header.flag) << " SEQ:" << int(header.SEQ) << endl;
     clock_t start = clock();
     while (true)
     {
@@ -123,8 +123,7 @@ void send_package(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_ad
             if (clock() - start > MAX_WAIT_TIME)
             {
                 header.datasize = len;
-                header.SEQ = u_char(seq);
-                header.flag = u_char(0x0);
+                header.SEQ = unsigned char(seq);
                 memcpy(buffer, &header, sizeof(header));
                 memcpy(buffer + sizeof(header), message, sizeof(header) + len);
                 unsigned short check = check_sum((unsigned short *)buffer, sizeof(header) + len); //计算校验和
@@ -132,7 +131,8 @@ void send_package(SOCKET &socketClient, SOCKADDR_IN &server_addr, int &server_ad
                 memcpy(buffer, &header, sizeof(header));
                 sendto(socketClient, buffer, len + sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len);
                 cout << "超时重传 " << len << " bytes! Flag:" << int(header.flag) << " SEQ:" << int(header.SEQ) << endl;
-                clock_t start = clock();
+                start = clock();
+                continue;
             }
         }
         memcpy(&header, buffer, sizeof(header)); //缓冲区接收到信息，读取
@@ -312,7 +312,7 @@ int main()
     clock_t start = clock();
     send(server, server_addr, len, data_buffer, index);
     clock_t end = clock();
-    cout << "传输总时间为:" << (end - start) / CLOCKS_PER_SEC << "s" << endl;
-    cout << "吞吐率为:" << ((float)index) / ((end - start) / CLOCKS_PER_SEC) << "byte/s" << endl;
+    cout << "传输总时间为:" << (float)(end - start) / CLOCKS_PER_SEC << "s" << endl;
+    cout << "吞吐率为:" << ((float)index) / ((float)(end - start) / CLOCKS_PER_SEC) << "byte/s" << endl;
     disConnect(server, server_addr, len);
 }

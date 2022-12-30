@@ -104,7 +104,7 @@
         while (first_pos < package_num - 1)
         {
             int pack_len = 0;
-            if (last_pos - first_pos < MAX_WINDOW)
+            if (last_pos != package_num && last_pos - first_pos < MAX_WINDOW)
             {
                 //若窗口未满，直接发送数据包即可
                 HEADER header;
@@ -120,39 +120,47 @@
                 header.sum = check_sum((unsigned short *)buffer, sizeof(header) + pack_len);
                 memcpy(buffer, &header, sizeof(header));
                 sendto(socketClient, buffer, pack_len + sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len);
-                cout << "发送信息 " << len << " bytes! SEQ:" << int(header.SEQ) << endl;
+                cout << "发送信息 " << pack_len << " bytes! SEQ:" << int(header.SEQ) << endl;
                 start = clock();
                 last_pos++;
             }
             //变为非阻塞模式
             unsigned long mode = 1;
             ioctlsocket(socketClient, FIONBIO, &mode);
-            if (recvfrom(socketClient, buffer, BUFFER_SIZE, 0, (sockaddr *)&server_addr, &server_addr_len))
+            if (recvfrom(socketClient, buffer, sizeof(header), 0, (sockaddr *)&server_addr, &server_addr_len) > 0)
             {
                 memcpy(&header, buffer, sizeof(header));
                 if (check_sum((unsigned short *)&header, sizeof(header)) == 0)
                 {
-                    if (header.SEQ > first_pos % 256) // ACK对应序列号有效
-                        first_pos += int(header.SEQ) - first_pos % 256;
-                    else if (header.SEQ < MAX_WINDOW && first_pos % 256 + MAX_WINDOW >= 256) //窗口横跨两个256序列号组
-                        first_pos += int(header.SEQ) - first_pos % 256 + 256;
+                    unsigned char temp = header.SEQ - first_pos % 256;
+                    if (temp > 0)
+                    {
+                        // ACK对应序列号有效
+                        first_pos += temp;
+                    }
+                    else if (header.SEQ < MAX_WINDOW && first_pos % 256 + MAX_WINDOW >= 256)
+                    {
+                        //窗口横跨两个256序列号组
+                        temp += temp + 256;
+                        first_pos += temp;
+                    }
                     else
                         continue; //忽略重复ACK
                     cout << "发送已被确认! SEQ:" << int(header.SEQ) << endl;
                     cout << "窗口：" << first_pos << "~" << first_pos + MAX_WINDOW << endl;
+                    continue;
                 }
                 else
                 {
                     //校验和出错，丢弃未确认数据包
                     last_pos = first_pos + 1;
-                    cout << "校验错误！已丢弃未确认数据包" << endl;
+                    cout << "ERROR！已丢弃未确认数据包" << endl;
                     continue;
                 }
             }
             else
             {
-                clock_t present = clock();
-                if (present - start > MAX_WAIT_TIME)
+                if (clock() - start > MAX_WAIT_TIME)
                 {
                     last_pos = first_pos + 1;
                     cout << "确认超时，开始重传...";
@@ -168,7 +176,7 @@
         memcpy(buffer, &header, sizeof(header));
         sendto(socketClient, buffer, sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len);
         cout << "已发送结束请求!" << endl;
-        start = clock();
+        clock_t start_ = clock();
         while (true)
         {
             unsigned long mode = 1;
@@ -176,7 +184,7 @@
             while (recvfrom(socketClient, buffer, BUFFER_SIZE, 0, (sockaddr *)&server_addr, &server_addr_len) <= 0)
             {
                 clock_t present = clock();
-                if (present - start > MAX_WAIT_TIME)
+                if (present - start_ > MAX_WAIT_TIME)
                 {
                     char *buffer = new char[sizeof(header)];
                     header.flag = END;
@@ -185,7 +193,7 @@
                     memcpy(buffer, &header, sizeof(header));
                     sendto(socketClient, buffer, sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len);
                     cout << "发送超时! 开始重传..." << endl;
-                    start = clock();
+                    start_ = clock();
                 }
             }
             memcpy(&header, buffer, sizeof(header));
@@ -211,7 +219,7 @@
                 memcpy(buffer, &header, sizeof(header));
                 sendto(socketClient, buffer, sizeof(header), 0, (sockaddr *)&server_addr, server_addr_len);
                 cout << "校验失败，已重新发送结束请求!" << endl;
-                start = clock();
+                start_ = clock();
             }
         }
         unsigned long mode = 0;
@@ -236,7 +244,7 @@
                 memcpy(&header, buffer, sizeof(header));
                 if (header.flag == 0)
                 {
-                    if (int(header.SEQ) == seq)
+                    if (header.SEQ == seq)
                     {
                         char *temp_buffer = new char[mess_len - sizeof(header)];
                         memcpy(temp_buffer, buffer + sizeof(header), mess_len - sizeof(header));
@@ -250,7 +258,6 @@
                         header.sum = 0;
                         header.sum = check_sum((unsigned short *)&header, sizeof(header));
                         memcpy(buffer, &header, sizeof(header));
-                        // Sleep(10); //模拟传输延迟
                         if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, client_addr_len) == SOCKET_ERROR)
                         {
                             return SOCKET_ERROR;
@@ -264,18 +271,19 @@
                     else
                     {
                         //序列号不匹配
+                        cout << "已接收数据 " << mess_len - sizeof(header) << " bytes! SEQ: " << int(header.SEQ) << endl;
                         header.flag = ACK;
                         header.datasize = 0;
                         header.SEQ = (unsigned char)(seq - 1);
                         header.sum = 0;
                         header.sum = check_sum((unsigned short *)&header, sizeof(header));
                         memcpy(buffer, &header, sizeof(header));
-                        //重发该包的ACK
+                        //重发ACK
                         if (sendto(socketServer, buffer, sizeof(header), 0, (sockaddr *)&client_addr, client_addr_len) == SOCKET_ERROR)
                         {
                             return SOCKET_ERROR;
                         }
-                        cout << "已发送ACK! SEQ:" << (int)header.SEQ << endl;
+                        cout << "待接收序列号: " << seq << " 序列号无效，已重发ACK! SEQ:" << (int)header.SEQ << endl;
                         continue;
                     }
                 }
@@ -300,6 +308,36 @@
 
 ## 四. 实验结果 ##
  
+用课程提供的路由程序进行丢包率、延时的设定，运行结果如下所示：
 
+* 客户端
+
+![](./pic/result_1.png)
+
+![](./pic/result_2.png)
+
+![](./pic/result_3.png)
+
+如图所示，日志中输出了每次接收到ACK确认后发送窗口的变化，当等待确认超时后，依据`Go Back N`协议进行重传，丢弃了所有未确认的数据包。
+
+* 服务器端
+
+![](./pic/result_4.png)
+
+![](./pic/result_5.png)
+
+可见服务器端在接收到数据包后对序列号SEQ进行了验证，若不满足确认顺序，则返回了上一个已发送过的ACK确认。
+
+* 窗口大小选择
+
+    上图为发送窗口大小设为4时的运行结果，可以看到吞吐率为`109256byte/s`，运行时间为`17s`，接下来分别尝试窗口大小为8和16：
+
+    * 发送窗口`6`：吞吐率`116085byte/s`，运行时间`16s`
+
+    * 发送窗口`8`：吞吐率`103186byte/s`，运行时间`18s`
+    
+    可以看出，窗口大小为6时性能最佳，按理来说，窗口大小应当越大越好，但是当窗口大小过大时，丢包后超时重传所消耗的代价也相应增加，因此窗口大小为8时性能还不如窗口大小为4，所以一个适中的窗口大小所带来的性能提升是最理想的。
+
+&nbsp;
 
 ###### 源码链接：https://github.com/Donnykk/Computer_Network/tree/main/UDP_ReliableConnection

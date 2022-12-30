@@ -120,20 +120,20 @@
 ## 四.实验结果 ##
 * 三次握手，建立连接：
     
-    ![](./pic/shake_1.png =650x400)  
+    ![](./pic/shake_1.png)  
 
-    ![](./pic/shake_2.png =650x400)
+    ![](./pic/shake_2.png)
 
 * 文件传输：
 
-    ![](./pic/trans_1.png =650x400)
+    ![](./pic/trans_1.png)
 
-    ![](./pic/trans_2.png =650x400)
+    ![](./pic/trans_2.png)
 
 * 四次挥手，断开连接：
 
-    ![](./pic/disconnect_1.png =650x400)
+    ![](./pic/disconnect_1.png)
 
-    ![](./pic/disconnect_2.png =650x400)
+    ![](./pic/disconnect_2.png)
 
 ### 源码链接：https://github.com/Donnykk/Computer_Network/tree/main/UDP_ReliableConnection ###

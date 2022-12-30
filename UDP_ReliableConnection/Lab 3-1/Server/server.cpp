@@ -131,7 +131,6 @@ int recv_message(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len, char 
             {
                 header.flag = ACK;
                 header.datasize = 0;
-                header.SEQ = (unsigned char)seq;
                 header.sum = 0;
                 unsigned short temp = check_sum((unsigned short *)&header, sizeof(header));
                 header.sum = temp;
@@ -141,6 +140,7 @@ int recv_message(SOCKET &socketServer, SOCKADDR_IN &client_addr, int &len, char 
                 {
                     return SOCKET_ERROR;
                 }
+                cout << "接收到错误序列号，正确SEQ:" << (int)seq << endl;
                 cout << "向客户端重传ACK，SEQ:" << (int)header.SEQ << endl;
                 continue; //丢弃该数据包
             }
@@ -263,7 +263,7 @@ int main()
     SOCKADDR_IN server_addr;
     SOCKET server;
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(6666);
+    server_addr.sin_port = htons(6667);
     server_addr.sin_addr.s_addr = htonl(2130706433);
     server = socket(AF_INET, SOCK_DGRAM, 0);
     bind(server, (SOCKADDR *)&server_addr, sizeof(server_addr));
